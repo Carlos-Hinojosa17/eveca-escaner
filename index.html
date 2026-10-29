@@ -5,125 +5,198 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Eveca Autopartes - Escáner</title>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
+    * { box-sizing: border-box; }
+
     body {
       font-family: Arial, sans-serif;
       max-width: 500px;
       margin: 0 auto;
       padding: 20px;
-      background: #f4f5f7;
+      background: #f3f5f7;
+      color: #222;
     }
+
     section {
       background: white;
       padding: 18px;
       border-radius: 14px;
+      box-shadow: 0 2px 8px #0000000d;
     }
+
+    h1 { font-size: 24px; }
+
     button, input {
-      box-sizing: border-box;
       width: 100%;
       padding: 13px;
       margin-top: 10px;
       font-size: 16px;
+      border-radius: 9px;
     }
+
     button {
       border: 0;
-      border-radius: 8px;
       background: #a51e22;
       color: white;
+      font-weight: bold;
     }
-    #resultado { overflow-wrap: anywhere; }
+
+    button:disabled { opacity: .55; }
+
+    .secundario { background: #303943; }
+
+    #resultado {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.5;
+    }
+
+    #lector { margin-top: 14px; }
   </style>
 </head>
+
 <body>
-  <section>
-    <h2>Eveca Autopartes</h2>
-    <p>Prueba de escáner de códigos de barras</p>
+<section>
+  <h1>Eveca Autopartes</h1>
+  <p>Escanea el código de barras para buscar el repuesto en el inventario.</p>
 
-    <div id="lector"></div>
-    <p id="resultado">Pulsa para activar la cámara.</p>
+  <div id="lector"></div>
 
-    <button id="abrir" onclick="iniciar()">Abrir cámara</button>
-    <button onclick="detener()">Cerrar cámara</button>
+  <p id="resultado" role="status">
+    Pulsa «Abrir cámara» para comenzar.
+  </p>
 
-    <label for="codigo">Código leído</label>
-    <input id="codigo" placeholder="El código aparecerá aquí">
-  </section>
+  <button id="abrir" onclick="iniciar()">
+    Abrir cámara
+  </button>
 
-  <script>
-    let lector = null;
-    let activo = false;
-    let procesando = false;
+  <button class="secundario" onclick="detener()">
+    Cerrar cámara
+  </button>
 
-    async function iniciar() {
-      if (typeof Html5Qrcode === "undefined") {
-        document.getElementById("resultado").textContent =
-          "No se cargó la biblioteca. Revisa tu conexión.";
-        return;
+  <label for="codigo">Código leído</label>
+  <input id="codigo" type="text" placeholder="El código aparecerá aquí">
+
+  <button id="continuar" onclick="enviarInventario()" hidden>
+    Continuar al inventario
+  </button>
+</section>
+
+<script>
+  const URL_INVENTARIO =
+    "https://script.google.com/macros/s/AKfycbzlIzZ1LkLsfvNybS1QyIkndKPLRd3P4rP0qanzBEkXS6pb8y6oQTbqDOLqJbCnx0tw/exec";
+
+  let lector = null;
+  let activo = false;
+  let procesando = false;
+  let codigoLeido = "";
+
+  function estado(mensaje) {
+    document.getElementById("resultado").textContent = mensaje;
+  }
+
+  async function iniciar() {
+    if (typeof Html5Qrcode === "undefined") {
+      estado("No se pudo cargar el escáner. Comprueba tu conexión.");
+      return;
+    }
+
+    if (activo || procesando) return;
+
+    const boton = document.getElementById("abrir");
+    boton.disabled = true;
+
+    try {
+      if (!lector) {
+        lector = new Html5Qrcode("lector");
       }
 
-      if (activo) return;
+      estado("Solicitando acceso a la cámara...");
 
-      const boton = document.getElementById("abrir");
-      boton.disabled = true;
+      await lector.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 260, height: 130 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.ITF
+          ]
+        },
+        async function(codigo) {
+          if (procesando) return;
 
-      try {
-        if (!lector) lector = new Html5Qrcode("lector");
+          procesando = true;
+          codigoLeido = codigo;
 
-        await lector.start(
-          { facingMode: "environment" },
-          {
-            fps: 10,
-            qrbox: { width: 260, height: 130 },
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.ITF
-            ]
-          },
-          async codigo => {
-            if (procesando) return;
-            procesando = true;
+          document.getElementById("codigo").value = codigo;
+          document.getElementById("continuar").hidden = false;
 
-            document.getElementById("codigo").value = codigo;
-            document.getElementById("resultado").textContent =
-              "Código leído correctamente.";
+          estado("Código leído: " + codigo + "\nAbriendo el inventario...");
 
+          try {
             await detener();
-            procesando = false;
-          },
-          () => {}
-        );
+          } catch (error) {
+            console.log(error);
+          }
 
-        activo = true;
-        document.getElementById("resultado").textContent =
-          "Cámara activa. Enfoca un código de barras.";
-      } catch (error) {
-        document.getElementById("resultado").textContent =
-          "No se pudo abrir la cámara: " + error.message;
-      } finally {
-        boton.disabled = false;
-      }
+          // Permite continuar manualmente si hace falta.
+          setTimeout(function() {
+            enviarInventario();
+          }, 700);
+        },
+        function() {
+          // Ignorar lecturas parciales mientras la cámara enfoca.
+        }
+      );
+
+      activo = true;
+      estado("Cámara activa. Enfoca el código de barras.");
+
+    } catch (error) {
+      activo = false;
+      estado("No se pudo abrir la cámara: " + error.message);
+    } finally {
+      boton.disabled = false;
+    }
+  }
+
+  async function detener() {
+    if (!lector || !activo) return;
+
+    try {
+      await lector.stop();
+    } finally {
+      activo = false;
+    }
+  }
+
+  function enviarInventario() {
+    const codigo = (
+      codigoLeido ||
+      document.getElementById("codigo").value
+    ).trim();
+
+    if (!codigo) {
+      estado("Primero escanea o escribe un código.");
+      return;
     }
 
-    async function detener() {
-      if (!lector || !activo) return;
+    estado("Abriendo el inventario...");
 
-      try {
-        await lector.stop();
-        document.getElementById("resultado").textContent =
-          "Cámara cerrada.";
-      } catch (error) {
-        document.getElementById("resultado").textContent =
-          "Error al cerrar la cámara: " + error.message;
-      } finally {
-        activo = false;
-      }
-    }
-  </script>
+    const destino =
+      URL_INVENTARIO + "?codigo=" + encodeURIComponent(codigo);
+
+    window.location.assign(destino);
+  }
+</script>
 </body>
 </html>
