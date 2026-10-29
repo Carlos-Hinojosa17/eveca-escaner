@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eveca Autopartes - Escáner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f4f5f7;
+    }
+    section {
+      background: white;
+      padding: 18px;
+      border-radius: 14px;
+    }
+    button, input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 13px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      background: #a51e22;
+      color: white;
+    }
+    #resultado { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <section>
+    <h2>Eveca Autopartes</h2>
+    <p>Prueba de escáner de códigos de barras</p>
+
+    <div id="lector"></div>
+    <p id="resultado">Pulsa para activar la cámara.</p>
+
+    <button id="abrir" onclick="iniciar()">Abrir cámara</button>
+    <button onclick="detener()">Cerrar cámara</button>
+
+    <label for="codigo">Código leído</label>
+    <input id="codigo" placeholder="El código aparecerá aquí">
+  </section>
+
+  <script>
+    let lector = null;
+    let activo = false;
+    let procesando = false;
+
+    async function iniciar() {
+      if (typeof Html5Qrcode === "undefined") {
+        document.getElementById("resultado").textContent =
+          "No se cargó la biblioteca. Revisa tu conexión.";
+        return;
+      }
+
+      if (activo) return;
+
+      const boton = document.getElementById("abrir");
+      boton.disabled = true;
+
+      try {
+        if (!lector) lector = new Html5Qrcode("lector");
+
+        await lector.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 130 },
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.ITF
+            ]
+          },
+          async codigo => {
+            if (procesando) return;
+            procesando = true;
+
+            document.getElementById("codigo").value = codigo;
+            document.getElementById("resultado").textContent =
+              "Código leído correctamente.";
+
+            await detener();
+            procesando = false;
+          },
+          () => {}
+        );
+
+        activo = true;
+        document.getElementById("resultado").textContent =
+          "Cámara activa. Enfoca un código de barras.";
+      } catch (error) {
+        document.getElementById("resultado").textContent =
+          "No se pudo abrir la cámara: " + error.message;
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
+    async function detener() {
+      if (!lector || !activo) return;
+
+      try {
+        await lector.stop();
+        document.getElementById("resultado").textContent =
+          "Cámara cerrada.";
+      } catch (error) {
+        document.getElementById("resultado").textContent =
+          "Error al cerrar la cámara: " + error.message;
+      } finally {
+        activo = false;
+      }
+    }
+  </script>
+</body>
+</html>
